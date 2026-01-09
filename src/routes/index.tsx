@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RallyDashboard } from "../components/RallyDashboard";
+import { MainMenu } from "../components/MainMenu";
 
 export const Route = createFileRoute("/")({
   component: Home,
 });
 
 function Home() {
-  return <RallyDashboard />;
+  return <MainMenu />;
 }
