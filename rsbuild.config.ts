@@ -11,7 +11,7 @@ export default defineConfig({
   },
   tools: {
     rspack: {
-      plugins: [TanStackRouterRspack({ target: "react", autoCodeSplitting: true })],
+      plugins: [TanStackRouterRspack({ target: "react", autoCodeSplitting: false })],
     },
   },
   html: {
