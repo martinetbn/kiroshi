@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 export function RallyDashboard() {
   const [scale, setScale] = useState(1);
 
+  // Highlighted row position: 0 = hidden, 1 = first data row, 2 = second, etc.
+  const [highlightedRow, setHighlightedRow] = useState(3);
+
   useEffect(() => {
     const updateScale = () => {
       const scaleX = window.innerWidth / 1440;
@@ -14,6 +17,7 @@ export function RallyDashboard() {
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
   }, []);
+
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#ececec]">
@@ -86,7 +90,7 @@ export function RallyDashboard() {
           1052.32
         </p>
         <p className="absolute left-[860px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
-          1052.61
+          1051.75
         </p>
 
         {/* Distance Display */}
@@ -100,14 +104,14 @@ export function RallyDashboard() {
         {/* PC Section */}
         <div className="absolute left-[436px] top-[745px] w-[568px] h-[102px] bg-black overflow-hidden">
           <p className="absolute left-1/2 -translate-x-1/2 top-[22px] text-[48px] font-bold text-white text-center">
-            PC 33
+            PC 8
           </p>
         </div>
 
         {/* Hora de carrera */}
         <div className="absolute left-[436px] top-[847px] w-[284px] h-[109px] flex flex-col gap-1 items-center justify-center text-black text-center overflow-hidden">
           <p className="text-[24px] font-medium">Hora de carrera</p>
-          <p className="text-[36px] font-semibold">02:35:44</p>
+          <p className="text-[36px] font-semibold">08:35:44</p>
         </div>
 
         {/* Proxima PC */}
@@ -123,72 +127,66 @@ export function RallyDashboard() {
           </p>
         </div>
 
-        {/* Left Table (M/S/C, VEL, EVT) */}
-        <div className="absolute left-0 top-[344px] w-[436px] h-[680px] bg-black text-white text-[24px] font-medium overflow-hidden">
-          {/* Column dividers */}
-          <div className="absolute left-[200px] top-[25px] w-px h-[629px] bg-[#d9d9d9]" />
-          <div className="absolute left-[298px] top-[25px] w-px h-[629px] bg-[#d9d9d9]" />
-
+        {/* Left Table (HS:MN:SG:CC, VEL, EVT, DET) */}
+        <div className="absolute left-0 top-[344px] w-[436px] h-[680px] bg-black text-white text-[20px] font-medium overflow-hidden flex flex-col pt-[22px] pb-[28px] px-[28px]">
           {/* Header row */}
-          <p className="absolute left-[60px] top-[36px]">M/S/C</p>
-          <p className="absolute left-[229px] top-[36px]">VEL</p>
-          <p className="absolute left-[330px] top-[36px]">EVT</p>
+          <div className="flex gap-[30px] whitespace-nowrap py-[8px]">
+            <span className="w-[120px]">HS:MN:SG:CC</span>
+            <span className="w-[40px]">VEL</span>
+            <span className="w-[40px]">EVT</span>
+            <span className="w-[40px]">DET</span>
+          </div>
 
           {/* Data rows */}
-          <p className="absolute left-[60px] top-[86px]">30:00:00</p>
-          <p className="absolute left-[229px] top-[86px]">82</p>
-          <p className="absolute left-[332px] top-[86px]">LAR</p>
-
-          <p className="absolute left-[60px] top-[126px]">31:46:55</p>
-          <p className="absolute left-[229px] top-[126px]">82</p>
-          <p className="absolute left-[332px] top-[128px]">-</p>
-
-          <p className="absolute left-[60px] top-[166px]">33:52:27</p>
-          <p className="absolute left-[229px] top-[166px]">82</p>
-          <p className="absolute left-[332px] top-[166px]">-</p>
-
-          <p className="absolute left-[60px] top-[206px]">35:34:18</p>
-          <p className="absolute left-[229px] top-[206px]">82</p>
-          <p className="absolute left-[332px] top-[206px]">-</p>
-
-          {/* Highlighted row */}
-          <div className="absolute left-[45px] top-[242px] w-[347px] h-[37px] bg-[#3e61ff]" />
-          <p className="absolute left-[60px] top-[246px]">38:00:00</p>
-          <p className="absolute left-[229px] top-[246px]">80</p>
-          <p className="absolute left-[330px] top-[246px]">CVR</p>
-
-          <p className="absolute left-[60px] top-[286px]">40:00:00</p>
-          <p className="absolute left-[229px] top-[286px]">82</p>
-          <p className="absolute left-[330px] top-[286px]">CVR</p>
-
-          <p className="absolute left-[60px] top-[326px]">42:00:00</p>
-          <p className="absolute left-[230px] top-[326px]">78</p>
-          <p className="absolute left-[330px] top-[326px]">CVR</p>
+          {[
+            { time: "08:30:00:00", vel: "82", evt: "LAR", det: "-" },
+            { time: "08:31:46:55", vel: "82", evt: "REF", det: "-" },
+            { time: "08:33:52:27", vel: "82", evt: "REF", det: "-" },
+            { time: "08:35:34:18", vel: "82", evt: "REF", det: "ZC" },
+            { time: "08:38:00:00", vel: "82", evt: "REF", det: "-" },
+            { time: "08:40:00:00", vel: "80", evt: "CVR", det: "-" },
+            { time: "08:42:00:00", vel: "82", evt: "CVR", det: "-" },
+          ].map((row, index) => (
+            <div
+              key={index}
+              className={`flex gap-[30px] whitespace-nowrap py-[8px] -mx-[28px] px-[28px] ${
+                highlightedRow === index + 1 ? "bg-[#3e61ff]" : ""
+              }`}
+            >
+              <span className="w-[120px]">{row.time}</span>
+              <span className="w-[40px]">{row.vel}</span>
+              <span className="w-[40px]">{row.evt}</span>
+              <span className="w-[40px]">{row.det}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Right Table (M/S/C, COEF, CC) */}
-        <div className="absolute left-[1004px] top-[344px] w-[436px] h-[680px] bg-black text-white text-[24px] font-medium text-center overflow-hidden">
-          {/* Column dividers */}
-          <div className="absolute left-[184px] top-[25px] w-px h-[629px] bg-[#d9d9d9]" />
-          <div className="absolute left-[318px] top-[25px] w-px h-[629px] bg-[#d9d9d9]" />
-
+        {/* Right Table (MN:SG:CC, COEF, DIF CC, MTS) */}
+        <div className="absolute left-[1004px] top-[344px] w-[436px] h-[680px] bg-black text-white text-[20px] font-medium overflow-hidden flex flex-col pt-[22px] pb-[28px] px-[28px]">
           {/* Header row */}
-          <p className="absolute left-[94px] -translate-x-1/2 top-[36px]">M/S/C</p>
-          <p className="absolute left-[239px] -translate-x-1/2 top-[36px]">COEF</p>
-          <p className="absolute left-[354.5px] -translate-x-1/2 top-[36px]">CC</p>
+          <div className="flex gap-[18px] whitespace-nowrap py-[8px]">
+            <span className="w-[90px]">MN:SG:CC</span>
+            <span className="w-[70px]">COEF</span>
+            <span className="w-[60px]">DIF CC</span>
+            <span className="w-[50px]">MTS</span>
+          </div>
 
           {/* Data rows */}
-          <p className="absolute left-[109px] -translate-x-1/2 top-[86px]">30:00:00</p>
-          <p className="absolute left-[213.5px] -translate-x-1/2 top-[86px]">-</p>
-          <p className="absolute left-[342.5px] -translate-x-1/2 top-[86px]">-</p>
-
-          <p className="absolute left-[107px] -translate-x-1/2 top-[126px]">31:46:56</p>
-          <p className="absolute left-[251.5px] -translate-x-1/2 top-[126px]">1051.56</p>
-          <p className="absolute left-[360px] -translate-x-1/2 top-[126px]">-6.2</p>
-
-          <p className="absolute left-[108px] -translate-x-1/2 top-[166px]">33:52:29</p>
-          <p className="absolute left-[250.5px] -translate-x-1/2 top-[166px]">1051.75</p>
-          <p className="absolute left-[365px] -translate-x-1/2 top-[166px]">-10.3</p>
+          {[
+            { time: "30:00:00", coef: "-", dif: "-", mts: "-" },
+            { time: "31:46:56", coef: "1051.56", dif: "-6.2", mts: "-1.2" },
+            { time: "33:52:29", coef: "1051.75", dif: "-10.3", mts: "-3.6" },
+          ].map((row, index) => (
+            <div
+              key={index}
+              className="flex gap-[18px] whitespace-nowrap py-[8px]"
+            >
+              <span className="w-[90px]">{row.time}</span>
+              <span className="w-[70px]">{row.coef}</span>
+              <span className="w-[60px]">{row.dif}</span>
+              <span className="w-[50px]">{row.mts}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
