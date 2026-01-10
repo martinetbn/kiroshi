@@ -33,7 +33,7 @@ export function MainMenu() {
         <div className="flex gap-[60px] items-center h-[600px] mt-[100px]">
           {/* Carga Card */}
           <Link
-            to="/load"
+            to="/races"
             className="group relative w-[300px] h-full bg-[#3e61ff] -skew-x-[15deg] hover:bg-[#2d4ecc] hover:-translate-y-4 hover:shadow-[10px_10px_0px_rgba(0,0,0,0.2)] transition-all duration-300 overflow-hidden border-4 border-black"
           >
             <div className="absolute inset-0 skew-x-[15deg] flex flex-col items-center justify-center p-8">
