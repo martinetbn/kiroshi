@@ -19,7 +19,7 @@ export function MainMenu() {
         </Link>
 
         <button
-          className="h-[80px] bg-[#3e61ff] hover:bg-[#2d4ecc] text-white text-[32px] font-semibold transition-colors"
+          className="h-[80px] bg-[#3e61ff]/50 text-white/50 text-[32px] font-semibold cursor-not-allowed"
           disabled
         >
           Análisis
