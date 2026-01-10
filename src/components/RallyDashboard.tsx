@@ -37,6 +37,9 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
+  // Apply correction factor to computadora meters
+  const correctedComputadoraMeters = computadoraMeters * (correctionFactor / 1000);
+
   // Load odometer distance preference on mount
   useEffect(() => {
     getPreference(ODOMETER_DISTANCE_KEY).then((value) => {
@@ -71,7 +74,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
         setOdometerMeters((prev) => {
           const newValue = prev + increment;
-          setDiffSnapshot(newValue - computadoraMeters);
+          setDiffSnapshot(newValue - correctedComputadoraMeters);
           return newValue;
         });
       } else if (e.key === "c" || e.key === "C") {
@@ -104,7 +107,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance, computadoraMeters]);
+  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance, correctedComputadoraMeters]);
 
   // Helper to format time
   const formatTime = (ref: ReferenceEntry) => {
@@ -186,13 +189,13 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
             COMPUTADORA
           </p>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
-            {Math.floor(computadoraMeters / 1000) % 10}
+            {Math.floor(correctedComputadoraMeters / 1000) % 10}
           </p>
           <p className="absolute left-[208.5px] -translate-x-1/2 top-[99px] text-[175px] font-bold text-[#3e61ff]">
-            {Math.floor(computadoraMeters / 100) % 10}
+            {Math.floor(correctedComputadoraMeters / 100) % 10}
           </p>
           <p className="absolute left-[351.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-[#ef3c3c]">
-            {Math.floor(computadoraMeters / 10) % 10}
+            {Math.floor(correctedComputadoraMeters / 10) % 10}
           </p>
         </div>
 
