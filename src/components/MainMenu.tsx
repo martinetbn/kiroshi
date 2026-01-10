@@ -23,7 +23,7 @@ export function MainMenu() {
         style={{ transform: `scale(${scale})` }}
       >
         {/* Title */}
-        <div className="absolute top-[80px] left-0 w-full text-center">
+        <div className="absolute top-[60px] left-0 w-full text-center">
           <h1 className="text-[120px] font-black italic tracking-tighter text-black uppercase skew-x-[-10deg]">
             Kiroshi
           </h1>
