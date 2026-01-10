@@ -157,10 +157,20 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
     return h * 360000 + m * 6000 + s * 100 + cc;
   };
 
-  // Check if time is valid (greater than last reference, unless editing)
+  // Check if time components are within valid ranges (minutes/seconds ≤59, centiseconds ≤99)
+  const areTimeComponentsValid = () => {
+    if (timeInput.length !== 8) return true; // Don't show error while typing
+    const minutes = parseInt(timeInput.slice(2, 4)) || 0;
+    const seconds = parseInt(timeInput.slice(4, 6)) || 0;
+    const centiseconds = parseInt(timeInput.slice(6, 8)) || 0;
+    return minutes <= 59 && seconds <= 59 && centiseconds <= 99;
+  };
+
+  // Check if time is valid (valid components and greater than last reference, unless editing)
   const isTimeValid = () => {
     if (timeInput.length !== 8) return false;
-    if (editingRef) return true; // Skip validation when editing
+    if (!areTimeComponentsValid()) return false;
+    if (editingRef) return true; // Skip order validation when editing
     if (!references || references.length === 0) return true;
 
     const { hours, minutes, seconds, centiseconds } = parseTimeInput(timeInput);
