@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { listen } from "@tauri-apps/api/event";
 import { usePC } from "../hooks/usePCs";
@@ -13,6 +13,7 @@ import {
   adjustOdometer,
   resetOdometer,
   fullResetRaceTimer,
+  setRaceClockStart,
 } from "../api/tauri";
 import type { ReferenceEntry, RaceTimerState } from "../types";
 
@@ -40,6 +41,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     is_running: false,
     diff_snapshot: 0,
     odometer_meters: 0,
+    race_clock_centiseconds: 0,
   });
 
   // Load data
@@ -53,8 +55,8 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
-  // Track current speed to send to Rust
-  const currentSpeedRef = useRef(0);
+  // Track if initial setup is complete (use state to trigger re-render)
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load odometer distance preference on mount
   useEffect(() => {
@@ -64,8 +66,11 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       }
     });
 
-    // Reset timer state when entering race mode
-    fullResetRaceTimer();
+    // Reset timer state when entering race mode, then mark as initialized
+    setIsInitialized(false);
+    fullResetRaceTimer().then(() => {
+      setIsInitialized(true);
+    });
   }, []);
 
   // Listen to race timer updates from Rust
@@ -114,13 +119,12 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     ? speedChanges[currentSpeedChangeIndex].speed
     : 0;
 
-  // Update Rust with current speed when it changes
+  // Update Rust with current speed when it changes or after initialization
   useEffect(() => {
-    if (currentSpeedRef.current !== currentSpeedNum) {
-      currentSpeedRef.current = currentSpeedNum;
+    if (isInitialized) {
       setRaceSpeed(currentSpeedNum);
     }
-  }, [currentSpeedNum]);
+  }, [currentSpeedNum, isInitialized]);
 
   useEffect(() => {
     const updateScale = () => {
@@ -149,6 +153,20 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       } else if (e.key === "c" || e.key === "C") {
         resetOdometer();
       } else if (e.key === "Enter") {
+        // When starting the race, set the race clock to start from LAR time
+        if (!timerState.is_running) {
+          // Find the LAR reference (race start)
+          const larRef = references?.find((ref) => ref.event_type === "LAR");
+          if (larRef) {
+            // Convert LAR time to centiseconds
+            const centiseconds =
+              larRef.hours * 360000 +
+              larRef.minutes * 6000 +
+              larRef.seconds * 100 +
+              larRef.centiseconds;
+            setRaceClockStart(centiseconds);
+          }
+        }
         toggleRaceTimer();
       } else if (e.key === "1") {
         adjustCorrectionFactor(-0.01);
@@ -176,7 +194,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance]);
+  }, [navigate, raceId, references, showDistanceModal, odometerDistance, timerState.is_running]);
 
   // Helper to format time
   const formatTime = (ref: ReferenceEntry) => {
@@ -196,7 +214,16 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   })) || [];
 
   // Extract values from timer state for display
-  const { corrected_meters, correction_factor, diff_snapshot, odometer_meters } = timerState;
+  const { corrected_meters, correction_factor, diff_snapshot, odometer_meters, race_clock_centiseconds } = timerState;
+
+  // Format race clock (centiseconds to HH:MM:SS)
+  const formatRaceClock = (totalCentiseconds: number): string => {
+    const totalSeconds = Math.floor(totalCentiseconds / 100);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#ececec]">
@@ -306,7 +333,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* Hora de carrera */}
         <div className="absolute left-[436px] top-[847px] w-[284px] h-[109px] flex flex-col gap-1 items-center justify-center text-black text-center overflow-hidden">
           <p className="text-[24px] font-medium">Hora de carrera</p>
-          <p className="text-[36px] font-semibold">08:35:44</p>
+          <p className="text-[36px] font-semibold">{formatRaceClock(race_clock_centiseconds)}</p>
         </div>
 
         {/* Proxima PC */}

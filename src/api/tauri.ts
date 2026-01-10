@@ -102,3 +102,6 @@ export const fullResetRaceTimer = () =>
 
 export const getRaceTimerState = () =>
   invoke<RaceTimerState>("get_race_timer_state");
+
+export const setRaceClockStart = (centiseconds: number) =>
+  invoke<RaceTimerState>("set_race_clock_start", { centiseconds });

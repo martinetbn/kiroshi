@@ -15,6 +15,8 @@ pub struct RaceTimerState {
     pub is_running: bool,
     pub diff_snapshot: f64,
     pub odometer_meters: f64,
+    // Race clock in centiseconds (hora de carrera)
+    pub race_clock_centiseconds: i64,
 }
 
 impl Default for RaceTimerState {
@@ -27,6 +29,7 @@ impl Default for RaceTimerState {
             is_running: false,
             diff_snapshot: 0.0,
             odometer_meters: 0.0,
+            race_clock_centiseconds: 0,
         }
     }
 }
@@ -39,6 +42,9 @@ struct TimerInternal {
     diff_snapshot: f64,
     odometer_meters: f64,
     last_update: Option<Instant>,
+    // Race clock tracking
+    race_clock_start_centiseconds: i64, // LAR reference time in centiseconds
+    race_clock_accumulated_centiseconds: f64, // Accumulated time since race start
 }
 
 impl Default for TimerInternal {
@@ -51,6 +57,8 @@ impl Default for TimerInternal {
             diff_snapshot: 0.0,
             odometer_meters: 0.0,
             last_update: None,
+            race_clock_start_centiseconds: 0,
+            race_clock_accumulated_centiseconds: 0.0,
         }
     }
 }
@@ -58,6 +66,8 @@ impl Default for TimerInternal {
 impl TimerInternal {
     fn to_state(&self) -> RaceTimerState {
         let corrected = self.accumulated_meters * (self.correction_factor / 1000.0);
+        // Calculate current race clock: start time + accumulated time
+        let race_clock = self.race_clock_start_centiseconds + self.race_clock_accumulated_centiseconds as i64;
         RaceTimerState {
             raw_meters: self.accumulated_meters,
             corrected_meters: corrected,
@@ -66,22 +76,30 @@ impl TimerInternal {
             is_running: self.is_running,
             diff_snapshot: self.diff_snapshot,
             odometer_meters: self.odometer_meters,
+            race_clock_centiseconds: race_clock,
         }
     }
 
     fn update(&mut self) {
-        if !self.is_running || self.current_speed == 0.0 {
-            self.last_update = Some(Instant::now());
-            return;
-        }
-
         let now = Instant::now();
+
         if let Some(last) = self.last_update {
             let elapsed_secs = now.duration_since(last).as_secs_f64();
-            // Speed is km/h, convert to m/s: speed / 3.6
-            let meters_per_second = self.current_speed / 3.6;
-            self.accumulated_meters += meters_per_second * elapsed_secs;
+
+            if self.is_running {
+                // Update race clock (always runs when race is running)
+                // Convert seconds to centiseconds (1 sec = 100 centiseconds)
+                self.race_clock_accumulated_centiseconds += elapsed_secs * 100.0;
+
+                // Update odometer only if speed > 0
+                if self.current_speed > 0.0 {
+                    // Speed is km/h, convert to m/s: speed / 3.6
+                    let meters_per_second = self.current_speed / 3.6;
+                    self.accumulated_meters += meters_per_second * elapsed_secs;
+                }
+            }
         }
+
         self.last_update = Some(now);
     }
 }
@@ -235,6 +253,12 @@ impl RaceTimer {
         let mut timer = self.internal.lock().unwrap();
         *timer = TimerInternal::default();
     }
+
+    pub fn set_race_clock_start(&self, centiseconds: i64) {
+        let mut timer = self.internal.lock().unwrap();
+        timer.race_clock_start_centiseconds = centiseconds;
+        timer.race_clock_accumulated_centiseconds = 0.0;
+    }
 }
 
 // Tauri commands
@@ -308,5 +332,11 @@ pub fn full_reset_race_timer(timer: State<RaceTimer>) -> RaceTimerState {
 
 #[tauri::command]
 pub fn get_race_timer_state(timer: State<RaceTimer>) -> RaceTimerState {
+    timer.get_state()
+}
+
+#[tauri::command]
+pub fn set_race_clock_start(timer: State<RaceTimer>, centiseconds: i64) -> RaceTimerState {
+    timer.set_race_clock_start(centiseconds);
     timer.get_state()
 }

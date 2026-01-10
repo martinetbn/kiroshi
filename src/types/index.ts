@@ -58,4 +58,5 @@ export interface RaceTimerState {
   is_running: boolean;
   diff_snapshot: number;
   odometer_meters: number;
+  race_clock_centiseconds: number;
 }
