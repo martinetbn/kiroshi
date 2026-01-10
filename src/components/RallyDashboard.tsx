@@ -14,6 +14,8 @@ import {
   resetOdometer,
   fullResetRaceTimer,
   setRaceClockStart,
+  getNextPc,
+  getReferencesByPc,
 } from "../api/tauri";
 import type { ReferenceEntry, RaceTimerState } from "../types";
 
@@ -52,6 +54,9 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // Current reference index (0-based, used for highlighting and speed display)
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // Next PC LAR time in centiseconds (null if no next PC)
+  const [nextPcLarCentiseconds, setNextPcLarCentiseconds] = useState<number | null>(null);
+
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
@@ -72,6 +77,25 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       setIsInitialized(true);
     });
   }, []);
+
+  // Fetch next PC's LAR time on mount
+  useEffect(() => {
+    getNextPc(pcId).then((nextPc) => {
+      if (nextPc) {
+        getReferencesByPc(nextPc.id).then((refs) => {
+          const larRef = refs.find((ref) => ref.event_type === "LAR");
+          if (larRef) {
+            const centiseconds =
+              larRef.hours * 360000 +
+              larRef.minutes * 6000 +
+              larRef.seconds * 100 +
+              larRef.centiseconds;
+            setNextPcLarCentiseconds(centiseconds);
+          }
+        });
+      }
+    });
+  }, [pcId]);
 
   // Listen to race timer updates from Rust
   useEffect(() => {
@@ -225,6 +249,17 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
+  // Format countdown to next PC (centiseconds to MM:SS)
+  const formatCountdown = (): string => {
+    if (nextPcLarCentiseconds === null) return "--:--";
+    const remainingCentiseconds = nextPcLarCentiseconds - race_clock_centiseconds;
+    if (remainingCentiseconds <= 0) return "00:00";
+    const totalSeconds = Math.floor(remainingCentiseconds / 100);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  };
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#ececec]">
       <div
@@ -339,7 +374,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* Proxima PC */}
         <div className="absolute left-[720px] top-[847px] w-[284px] h-[109px] flex flex-col gap-1 items-center justify-center text-black text-center overflow-hidden">
           <p className="text-[24px] font-medium">Proxima PC</p>
-          <p className="text-[36px] font-semibold">42:26</p>
+          <p className="text-[36px] font-semibold">{formatCountdown()}</p>
         </div>
 
         {/* CC Correction */}
