@@ -1,10 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { listen } from "@tauri-apps/api/event";
 import { usePC } from "../hooks/usePCs";
 import { useReferencesByPC } from "../hooks/useReferences";
 import { useRace } from "../hooks/useRaces";
-import { getPreference, setPreference } from "../api/tauri";
-import type { ReferenceEntry } from "../types";
+import {
+  getPreference,
+  setPreference,
+  toggleRaceTimer,
+  setRaceSpeed,
+  adjustCorrectionFactor,
+  adjustOdometer,
+  resetOdometer,
+  fullResetRaceTimer,
+} from "../api/tauri";
+import type { ReferenceEntry, RaceTimerState } from "../types";
 
 const ODOMETER_DISTANCE_KEY = "odometer_distance";
 
@@ -20,11 +30,17 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const navigate = useNavigate();
   const [odometerDistance, setOdometerDistance] = useState<OdometerDistance>("100m");
   const [showDistanceModal, setShowDistanceModal] = useState(false);
-  const [odometerMeters, setOdometerMeters] = useState(0);
-  const [computadoraMeters, setComputadoraMeters] = useState(0);
-  const [isRaceRunning, setIsRaceRunning] = useState(false);
-  const [diffSnapshot, setDiffSnapshot] = useState(0);
-  const [correctionFactor, setCorrectionFactor] = useState(1042.0);
+
+  // Race timer state from Rust
+  const [timerState, setTimerState] = useState<RaceTimerState>({
+    raw_meters: 0,
+    corrected_meters: 0,
+    correction_factor: 1042.0,
+    current_speed: 0,
+    is_running: false,
+    diff_snapshot: 0,
+    odometer_meters: 0,
+  });
 
   // Load data
   const { data: _race } = useRace(raceId);
@@ -37,8 +53,8 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
-  // Apply correction factor to computadora meters
-  const correctedComputadoraMeters = computadoraMeters * (correctionFactor / 1000);
+  // Track current speed to send to Rust
+  const currentSpeedRef = useRef(0);
 
   // Load odometer distance preference on mount
   useEffect(() => {
@@ -47,84 +63,21 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         setOdometerDistance(value);
       }
     });
+
+    // Reset timer state when entering race mode
+    fullResetRaceTimer();
   }, []);
 
+  // Listen to race timer updates from Rust
   useEffect(() => {
-    const updateScale = () => {
-      const scaleX = window.innerWidth / 1440;
-      const scaleY = window.innerHeight / 1024;
-      setScale(Math.min(scaleX, scaleY));
-    };
+    const unlisten = listen<RaceTimerState>("race-timer-update", (event) => {
+      setTimerState(event.payload);
+    });
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (showDistanceModal) {
-          setShowDistanceModal(false);
-        } else {
-          navigate({ to: "/carrera/$raceId", params: { raceId: String(raceId) } });
-        }
-      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        setCurrentIndex((prev) => {
-          const maxIndex = (references?.length ?? 1) - 1;
-          return prev < maxIndex ? prev + 1 : prev;
-        });
-      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
-      } else if (e.key === "a" || e.key === "A") {
-        const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
-        setOdometerMeters((prev) => {
-          const newValue = prev + increment;
-          setDiffSnapshot(newValue - correctedComputadoraMeters);
-          return newValue;
-        });
-      } else if (e.key === "c" || e.key === "C") {
-        setOdometerMeters(0);
-      } else if (e.key === "Enter") {
-        setIsRaceRunning((prev) => !prev);
-      } else if (e.key === "1") {
-        setCorrectionFactor((prev) => prev - 0.01);
-      } else if (e.key === "2") {
-        setCorrectionFactor((prev) => prev + 0.01);
-      } else if (e.key === "3") {
-        setCorrectionFactor((prev) => prev - 1);
-      } else if (e.key === "4") {
-        setCorrectionFactor((prev) => prev + 1);
-      } else if (e.key === "q" || e.key === "Q") {
-        setCorrectionFactor((prev) => prev - 10);
-      } else if (e.key === "w" || e.key === "W") {
-        setCorrectionFactor((prev) => prev + 10);
-      } else if (e.key === "e" || e.key === "E") {
-        setCorrectionFactor((prev) => prev - 100);
-      } else if (e.key === "r" || e.key === "R") {
-        setCorrectionFactor((prev) => prev + 100);
-      }
-    };
-
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener("resize", updateScale);
-      window.removeEventListener("keydown", handleKeyDown);
+      unlisten.then((fn) => fn());
     };
-  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance, correctedComputadoraMeters]);
-
-  // Helper to format time
-  const formatTime = (ref: ReferenceEntry) => {
-    const h = String(ref.hours).padStart(2, "0");
-    const m = String(ref.minutes).padStart(2, "0");
-    const s = String(ref.seconds).padStart(2, "0");
-    const c = String(ref.centiseconds).padStart(2, "0");
-    return `${h}:${m}:${s}:${c}`;
-  };
-
-  // Get the reference data for display
-  const referenceRows = references?.map((ref) => ({
-    time: formatTime(ref),
-    vel: String(ref.speed),
-    evt: ref.event_type,
-    det: ref.is_control_zone ? "ZC" : "-",
-  })) || [];
+  }, []);
 
   // Build list of speed changes (only when speed differs from previous)
   const speedChanges = references?.reduce<{ speed: number; startIndex: number }[]>(
@@ -156,26 +109,94 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const speedAfter1 = getSpeedChangeAt(currentSpeedChangeIndex + 1);
   const speedAfter2 = getSpeedChangeAt(currentSpeedChangeIndex + 2);
 
-  // Get numeric current speed for calculations
+  // Get numeric current speed for Rust
   const currentSpeedNum = currentSpeedChangeIndex >= 0 && currentSpeedChangeIndex < speedChanges.length
     ? speedChanges[currentSpeedChangeIndex].speed
     : 0;
 
-  // Race timer - increment COMPUTADORA odometer based on current speed
+  // Update Rust with current speed when it changes
   useEffect(() => {
-    if (!isRaceRunning || currentSpeedNum === 0) return;
+    if (currentSpeedRef.current !== currentSpeedNum) {
+      currentSpeedRef.current = currentSpeedNum;
+      setRaceSpeed(currentSpeedNum);
+    }
+  }, [currentSpeedNum]);
 
-    // Speed is in km/h, convert to meters per 100ms
-    // km/h to m/s: speed / 3.6
-    // m/s to m/100ms: speed / 36
-    const metersPerInterval = currentSpeedNum / 36;
+  useEffect(() => {
+    const updateScale = () => {
+      const scaleX = window.innerWidth / 1440;
+      const scaleY = window.innerHeight / 1024;
+      setScale(Math.min(scaleX, scaleY));
+    };
 
-    const interval = setInterval(() => {
-      setComputadoraMeters((prev) => prev + metersPerInterval);
-    }, 100);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showDistanceModal) {
+          setShowDistanceModal(false);
+        } else {
+          navigate({ to: "/carrera/$raceId", params: { raceId: String(raceId) } });
+        }
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        setCurrentIndex((prev) => {
+          const maxIndex = (references?.length ?? 1) - 1;
+          return prev < maxIndex ? prev + 1 : prev;
+        });
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      } else if (e.key === "a" || e.key === "A") {
+        const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
+        adjustOdometer(increment);
+      } else if (e.key === "c" || e.key === "C") {
+        resetOdometer();
+      } else if (e.key === "Enter") {
+        toggleRaceTimer();
+      } else if (e.key === "1") {
+        adjustCorrectionFactor(-0.01);
+      } else if (e.key === "2") {
+        adjustCorrectionFactor(0.01);
+      } else if (e.key === "3") {
+        adjustCorrectionFactor(-1);
+      } else if (e.key === "4") {
+        adjustCorrectionFactor(1);
+      } else if (e.key === "q" || e.key === "Q") {
+        adjustCorrectionFactor(-10);
+      } else if (e.key === "w" || e.key === "W") {
+        adjustCorrectionFactor(10);
+      } else if (e.key === "e" || e.key === "E") {
+        adjustCorrectionFactor(-100);
+      } else if (e.key === "r" || e.key === "R") {
+        adjustCorrectionFactor(100);
+      }
+    };
 
-    return () => clearInterval(interval);
-  }, [isRaceRunning, currentSpeedNum]);
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("resize", updateScale);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance]);
+
+  // Helper to format time
+  const formatTime = (ref: ReferenceEntry) => {
+    const h = String(ref.hours).padStart(2, "0");
+    const m = String(ref.minutes).padStart(2, "0");
+    const s = String(ref.seconds).padStart(2, "0");
+    const c = String(ref.centiseconds).padStart(2, "0");
+    return `${h}:${m}:${s}:${c}`;
+  };
+
+  // Get the reference data for display
+  const referenceRows = references?.map((ref) => ({
+    time: formatTime(ref),
+    vel: String(ref.speed),
+    evt: ref.event_type,
+    det: ref.is_control_zone ? "ZC" : "-",
+  })) || [];
+
+  // Extract values from timer state for display
+  const { corrected_meters, correction_factor, diff_snapshot, odometer_meters } = timerState;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#ececec]">
@@ -189,20 +210,20 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
             COMPUTADORA
           </p>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
-            {Math.floor(correctedComputadoraMeters / 1000) % 10}
+            {Math.floor(corrected_meters / 1000) % 10}
           </p>
           <p className="absolute left-[208.5px] -translate-x-1/2 top-[99px] text-[175px] font-bold text-[#3e61ff]">
-            {Math.floor(correctedComputadoraMeters / 100) % 10}
+            {Math.floor(corrected_meters / 100) % 10}
           </p>
           <p className="absolute left-[351.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-[#ef3c3c]">
-            {Math.floor(correctedComputadoraMeters / 10) % 10}
+            {Math.floor(corrected_meters / 10) % 10}
           </p>
         </div>
 
         {/* Status Section - Top Center */}
         {(() => {
-          const status = diffSnapshot < -0.3 ? "ATRASADO" : diffSnapshot > 0.3 ? "ADELANTADO" : "PERFECTO";
-          const displayValue = Math.abs(diffSnapshot).toFixed(1).replace(".", ",");
+          const status = diff_snapshot < -0.3 ? "ATRASADO" : diff_snapshot > 0.3 ? "ADELANTADO" : "PERFECTO";
+          const displayValue = Math.abs(diff_snapshot).toFixed(1).replace(".", ",");
           return (
             <div className="absolute left-[436px] top-0 w-[568px] h-[344px] bg-[#ef3c3c] text-center text-white overflow-hidden">
               <p className="absolute left-1/2 -translate-x-1/2 top-[32px] text-[48px] font-semibold">
@@ -227,13 +248,13 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
             {odometerDistance}
           </button>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
-            {Math.floor(odometerMeters / 1000) % 10}
+            {Math.floor(odometer_meters / 1000) % 10}
           </p>
           <p className="absolute left-[208.5px] -translate-x-1/2 top-[99px] text-[175px] font-bold text-[#3e61ff]">
-            {Math.floor(odometerMeters / 100) % 10}
+            {Math.floor(odometer_meters / 100) % 10}
           </p>
           <p className="absolute left-[353.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-[#ef3c3c]">
-            {Math.floor(odometerMeters / 10) % 10}
+            {Math.floor(odometer_meters / 10) % 10}
           </p>
         </div>
 
@@ -261,7 +282,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         <div className="absolute left-[436px] top-[446px] w-[284px] h-[66px] bg-[#ef3c3c]" />
         <div className="absolute left-[720px] top-[446px] w-[284px] h-[66px] bg-black" />
         <p className="absolute left-[588px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
-          {correctionFactor.toFixed(2)}
+          {correction_factor.toFixed(2)}
         </p>
         <p className="absolute left-[860px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
           1051.75

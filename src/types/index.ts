@@ -49,3 +49,13 @@ export interface UpdateReferenceRequest {
   speed: number;
   extra_value?: number;
 }
+
+export interface RaceTimerState {
+  raw_meters: number;
+  corrected_meters: number;
+  correction_factor: number;
+  current_speed: number;
+  is_running: boolean;
+  diff_snapshot: number;
+  odometer_meters: number;
+}

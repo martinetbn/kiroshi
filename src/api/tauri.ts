@@ -5,6 +5,7 @@ import type {
   ReferenceEntry,
   CreateReferenceRequest,
   UpdateReferenceRequest,
+  RaceTimerState,
 } from "../types";
 
 // ==================== RACE API ====================
@@ -63,3 +64,41 @@ export const getPreference = (key: string) =>
 
 export const setPreference = (key: string, value: string) =>
   invoke<void>("set_preference", { key, value });
+
+// ==================== RACE TIMER API ====================
+
+export const startRaceTimer = () =>
+  invoke<RaceTimerState>("start_race_timer");
+
+export const stopRaceTimer = () =>
+  invoke<RaceTimerState>("stop_race_timer");
+
+export const toggleRaceTimer = () =>
+  invoke<RaceTimerState>("toggle_race_timer");
+
+export const setRaceSpeed = (speed: number) =>
+  invoke<RaceTimerState>("set_race_speed", { speed });
+
+export const setCorrectionFactor = (factor: number) =>
+  invoke<RaceTimerState>("set_correction_factor", { factor });
+
+export const adjustCorrectionFactor = (delta: number) =>
+  invoke<RaceTimerState>("adjust_correction_factor", { delta });
+
+export const recordOdometerSnapshot = (odometerMeters: number) =>
+  invoke<RaceTimerState>("record_odometer_snapshot", { odometerMeters });
+
+export const adjustOdometer = (delta: number) =>
+  invoke<RaceTimerState>("adjust_odometer", { delta });
+
+export const resetOdometer = () =>
+  invoke<RaceTimerState>("reset_odometer");
+
+export const resetRaceTimer = () =>
+  invoke<RaceTimerState>("reset_race_timer");
+
+export const fullResetRaceTimer = () =>
+  invoke<RaceTimerState>("full_reset_race_timer");
+
+export const getRaceTimerState = () =>
+  invoke<RaceTimerState>("get_race_timer_state");
