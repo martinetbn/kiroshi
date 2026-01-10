@@ -1,10 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { LoadData } from "../components/LoadData";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/load")({
-  component: Load,
+  beforeLoad: () => {
+    throw redirect({ to: "/races" });
+  },
 });
-
-function Load() {
-  return <LoadData />;
-}
