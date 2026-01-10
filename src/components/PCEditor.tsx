@@ -103,12 +103,17 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
     };
   }, [navigate, raceId, contextMenu, showEventModal, showExtraInputModal, deletingRef]);
 
-  // Set default event type based on references
+  // Set default event type and speed based on references
   useEffect(() => {
-    if (references && references.length === 0) {
-      setEventType("LAR");
-    } else if (!editingRef) {
-      setEventType("REF");
+    if (!editingRef) {
+      if (references && references.length === 0) {
+        setEventType("LAR");
+      } else if (references && references.length > 0) {
+        setEventType("REF");
+        // Initialize speed from last reference
+        const lastRef = references[references.length - 1];
+        setSpeedInput(String(lastRef.speed));
+      }
     }
   }, [references, editingRef]);
 
@@ -147,9 +152,30 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
     return `${h}:${m}:${s}:${cc}`.replace(/ /g, "_");
   };
 
+  // Convert time to total centiseconds for comparison
+  const timeToCs = (h: number, m: number, s: number, cc: number) => {
+    return h * 360000 + m * 6000 + s * 100 + cc;
+  };
+
+  // Check if time is valid (greater than last reference, unless editing)
+  const isTimeValid = () => {
+    if (timeInput.length !== 8) return false;
+    if (editingRef) return true; // Skip validation when editing
+    if (!references || references.length === 0) return true;
+
+    const { hours, minutes, seconds, centiseconds } = parseTimeInput(timeInput);
+    const newTimeCs = timeToCs(hours, minutes, seconds, centiseconds);
+
+    const lastRef = references[references.length - 1];
+    const lastTimeCs = timeToCs(lastRef.hours, lastRef.minutes, lastRef.seconds, lastRef.centiseconds);
+
+    return newTimeCs > lastTimeCs;
+  };
+
   // Check if form is valid for saving
   const isFormValid = () => {
     if (timeInput.length !== 8) return false;
+    if (!isTimeValid()) return false;
     const speed = parseInt(speedInput);
     if (isNaN(speed) || speed < 0) return false;
     if (needsExtraInput && !extraValue) return false;
@@ -171,6 +197,15 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
     setTimeInput(cleaned);
   };
 
+  // Reset speed to last reference value if event doesn't support speed changes
+  const resetSpeedIfNeeded = (type: EventType) => {
+    const canChangeSpeed = type === "CVT" || type === "CVD" || type === "CVR";
+    if (!canChangeSpeed && references && references.length > 0) {
+      const lastRef = references[references.length - 1];
+      setSpeedInput(String(lastRef.speed));
+    }
+  };
+
   const handleEventSelect = (type: EventType) => {
     if (EXTRA_INPUT_CONFIG[type]) {
       setPendingEventType(type);
@@ -179,6 +214,7 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
     } else {
       setEventType(type);
       setExtraValue("");
+      resetSpeedIfNeeded(type);
       setShowEventModal(false);
     }
   };
@@ -186,6 +222,7 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
   const handleExtraInputConfirm = (value: string) => {
     if (pendingEventType) {
       setEventType(pendingEventType);
+      resetSpeedIfNeeded(pendingEventType);
       setExtraValue(value);
       setPendingEventType(null);
     }
@@ -374,8 +411,12 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
               </div>
             </div>
             {/* Unified time display */}
-            <div className="h-[140px] bg-[#ececec] flex items-center justify-center">
-              <span className="text-black text-[80px] font-bold tracking-[0.1em]">
+            <div className={`h-[140px] flex items-center justify-center ${
+              timeInput.length === 8 && !isTimeValid() ? "bg-red-100" : "bg-[#ececec]"
+            }`}>
+              <span className={`text-[80px] font-bold tracking-[0.1em] ${
+                timeInput.length === 8 && !isTimeValid() ? "text-red-500" : "text-black"
+              }`}>
                 {formatTimeDisplay(timeInput)}
               </span>
             </div>
