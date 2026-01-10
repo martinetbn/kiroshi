@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 export function RallyDashboard() {
   const [scale, setScale] = useState(1);
+  const navigate = useNavigate();
 
   // Highlighted row position: 0 = hidden, 1 = first data row, 2 = second, etc.
   const [highlightedRow, setHighlightedRow] = useState(3);
@@ -13,10 +15,20 @@ export function RallyDashboard() {
       setScale(Math.min(scaleX, scaleY));
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        navigate({ to: "/" });
+      }
+    };
+
     updateScale();
     window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
-  }, []);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("resize", updateScale);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [navigate]);
 
 
   return (
