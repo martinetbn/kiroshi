@@ -24,6 +24,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const [computadoraMeters, setComputadoraMeters] = useState(0);
   const [isRaceRunning, setIsRaceRunning] = useState(false);
   const [diffSnapshot, setDiffSnapshot] = useState(0);
+  const [correctionFactor, setCorrectionFactor] = useState(1042.0);
 
   // Load data
   const { data: _race } = useRace(raceId);
@@ -77,6 +78,22 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         setOdometerMeters(0);
       } else if (e.key === "Enter") {
         setIsRaceRunning((prev) => !prev);
+      } else if (e.key === "1") {
+        setCorrectionFactor((prev) => prev - 0.01);
+      } else if (e.key === "2") {
+        setCorrectionFactor((prev) => prev + 0.01);
+      } else if (e.key === "3") {
+        setCorrectionFactor((prev) => prev - 1);
+      } else if (e.key === "4") {
+        setCorrectionFactor((prev) => prev + 1);
+      } else if (e.key === "q" || e.key === "Q") {
+        setCorrectionFactor((prev) => prev - 10);
+      } else if (e.key === "w" || e.key === "W") {
+        setCorrectionFactor((prev) => prev + 10);
+      } else if (e.key === "e" || e.key === "E") {
+        setCorrectionFactor((prev) => prev - 100);
+      } else if (e.key === "r" || e.key === "R") {
+        setCorrectionFactor((prev) => prev + 100);
       }
     };
 
@@ -241,7 +258,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         <div className="absolute left-[436px] top-[446px] w-[284px] h-[66px] bg-[#ef3c3c]" />
         <div className="absolute left-[720px] top-[446px] w-[284px] h-[66px] bg-black" />
         <p className="absolute left-[588px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
-          1052.32
+          {correctionFactor.toFixed(2)}
         </p>
         <p className="absolute left-[860px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
           1051.75
