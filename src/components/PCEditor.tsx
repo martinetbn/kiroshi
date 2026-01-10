@@ -231,10 +231,11 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
 
   const needsExtraInput = eventType === "ADL" || eventType === "ATR" || eventType === "CVD";
 
-  // Speed can only be changed on first reference or speed change events
+  // Speed can only be changed on first reference (LAR) or speed change events
   const canEditSpeed =
     !references ||
     references.length === 0 ||
+    eventType === "LAR" ||
     eventType === "CVT" ||
     eventType === "CVD" ||
     eventType === "CVR";
@@ -269,6 +270,33 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
         speed,
         extra_value: extra,
       });
+
+      // If editing a speed change event, propagate the new speed to subsequent entries
+      const isSpeedChangeEvent = eventType === "LAR" || eventType === "CVT" || eventType === "CVD" || eventType === "CVR";
+      if (isSpeedChangeEvent && references) {
+        const editingIndex = references.findIndex(r => r.id === editingRef.id);
+        if (editingIndex !== -1) {
+          // Update subsequent references until we hit another speed change event
+          for (let i = editingIndex + 1; i < references.length; i++) {
+            const ref = references[i];
+            const refIsSpeedChange = ref.event_type === "CVT" || ref.event_type === "CVD" || ref.event_type === "CVR";
+            if (refIsSpeedChange) {
+              break; // Stop at the next speed change
+            }
+            // Update this reference's speed to match the edited speed change
+            await updateReference.mutateAsync({
+              id: ref.id,
+              hours: ref.hours,
+              minutes: ref.minutes,
+              seconds: ref.seconds,
+              centiseconds: ref.centiseconds,
+              event_type: ref.event_type,
+              speed,
+              extra_value: ref.extra_value ?? undefined,
+            });
+          }
+        }
+      }
     } else {
       await createReference.mutateAsync({
         pc_id: pcId,

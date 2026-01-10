@@ -1,12 +1,29 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { usePC } from "../hooks/usePCs";
+import { useReferencesByPC } from "../hooks/useReferences";
+import { useRace } from "../hooks/useRaces";
+import type { ReferenceEntry } from "../types";
 
-export function RallyDashboard() {
+interface RallyDashboardProps {
+  raceId: number;
+  pcId: number;
+}
+
+export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const [scale, setScale] = useState(1);
   const navigate = useNavigate();
 
-  // Highlighted row position: 0 = hidden, 1 = first data row, 2 = second, etc.
-  const [highlightedRow, setHighlightedRow] = useState(3);
+  // Load data
+  const { data: _race } = useRace(raceId);
+  const { data: pc } = usePC(pcId);
+  const { data: references, isLoading } = useReferencesByPC(pcId);
+
+  // Current reference index (0-based, used for highlighting and speed display)
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // For highlighting rows (1-based)
+  const highlightedRow = currentIndex + 1;
 
   useEffect(() => {
     const updateScale = () => {
@@ -17,7 +34,14 @@ export function RallyDashboard() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        navigate({ to: "/" });
+        navigate({ to: "/carrera/$raceId", params: { raceId: String(raceId) } });
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        setCurrentIndex((prev) => {
+          const maxIndex = (references?.length ?? 1) - 1;
+          return prev < maxIndex ? prev + 1 : prev;
+        });
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
       }
     };
 
@@ -28,7 +52,54 @@ export function RallyDashboard() {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate]);
+  }, [navigate, raceId, references?.length]);
+
+  // Helper to format time
+  const formatTime = (ref: ReferenceEntry) => {
+    const h = String(ref.hours).padStart(2, "0");
+    const m = String(ref.minutes).padStart(2, "0");
+    const s = String(ref.seconds).padStart(2, "0");
+    const c = String(ref.centiseconds).padStart(2, "0");
+    return `${h}:${m}:${s}:${c}`;
+  };
+
+  // Get the reference data for display
+  const referenceRows = references?.map((ref) => ({
+    time: formatTime(ref),
+    vel: String(ref.speed),
+    evt: ref.event_type,
+    det: ref.is_control_zone ? "ZC" : "-",
+  })) || [];
+
+  // Build list of speed changes (only when speed differs from previous)
+  const speedChanges = references?.reduce<{ speed: number; startIndex: number }[]>(
+    (acc, ref, index) => {
+      if (index === 0 || ref.speed !== references[index - 1].speed) {
+        acc.push({ speed: ref.speed, startIndex: index });
+      }
+      return acc;
+    },
+    []
+  ) ?? [];
+
+  // Find which speed change segment the current index belongs to
+  const currentSpeedChangeIndex = speedChanges.findIndex((change, i) => {
+    const nextChange = speedChanges[i + 1];
+    return currentIndex >= change.startIndex &&
+           (nextChange === undefined || currentIndex < nextChange.startIndex);
+  });
+
+  // Get speed at a specific speed change index
+  const getSpeedChangeAt = (changeIndex: number): string | null => {
+    if (changeIndex < 0 || changeIndex >= speedChanges.length) return null;
+    return String(speedChanges[changeIndex].speed);
+  };
+
+  // Display speeds: 1 before, current, 2 after (based on speed changes, not references)
+  const speedsBefore = getSpeedChangeAt(currentSpeedChangeIndex - 1);
+  const speedCurrent = getSpeedChangeAt(currentSpeedChangeIndex);
+  const speedAfter1 = getSpeedChangeAt(currentSpeedChangeIndex + 1);
+  const speedAfter2 = getSpeedChangeAt(currentSpeedChangeIndex + 2);
 
 
   return (
@@ -81,17 +152,21 @@ export function RallyDashboard() {
 
         {/* Speed Values Section */}
         <div className="absolute left-[436px] top-[344px] w-[568px] h-[102px] text-center">
-          <p className="absolute left-[188px] -translate-x-1/2 top-[29px] text-[36px] font-medium text-black/50">
-            82
+          {/* Previous speed */}
+          <p className="absolute left-[188px] -translate-x-1/2 top-[29px] text-[36px] font-medium text-black/30">
+            {speedsBefore ?? ""}
           </p>
+          {/* Current speed (highlighted) */}
           <p className="absolute left-[283px] -translate-x-1/2 top-[22px] text-[48px] font-bold text-black">
-            80
+            {speedCurrent ?? "-"}
           </p>
+          {/* Next speed */}
           <p className="absolute left-[378px] -translate-x-1/2 top-[29px] text-[36px] font-medium text-black/50">
-            82
+            {speedAfter1 ?? ""}
           </p>
-          <p className="absolute left-[463px] -translate-x-1/2 top-[29px] text-[36px] font-medium text-black/50">
-            78
+          {/* Speed after next */}
+          <p className="absolute left-[463px] -translate-x-1/2 top-[29px] text-[36px] font-medium text-black/30">
+            {speedAfter2 ?? ""}
           </p>
         </div>
 
@@ -116,7 +191,7 @@ export function RallyDashboard() {
         {/* PC Section */}
         <div className="absolute left-[436px] top-[745px] w-[568px] h-[102px] bg-black overflow-hidden">
           <p className="absolute left-1/2 -translate-x-1/2 top-[22px] text-[48px] font-bold text-white text-center">
-            PC 8
+            PC {pc?.pc_number ?? "-"}
           </p>
         </div>
 
@@ -150,27 +225,29 @@ export function RallyDashboard() {
           </div>
 
           {/* Data rows */}
-          {[
-            { time: "08:30:00:00", vel: "82", evt: "LAR", det: "-" },
-            { time: "08:31:46:55", vel: "82", evt: "REF", det: "-" },
-            { time: "08:33:52:27", vel: "82", evt: "REF", det: "-" },
-            { time: "08:35:34:18", vel: "82", evt: "REF", det: "ZC" },
-            { time: "08:38:00:00", vel: "82", evt: "REF", det: "-" },
-            { time: "08:40:00:00", vel: "80", evt: "CVR", det: "-" },
-            { time: "08:42:00:00", vel: "82", evt: "CVR", det: "-" },
-          ].map((row, index) => (
-            <div
-              key={index}
-              className={`flex gap-[30px] whitespace-nowrap py-[8px] -mx-[28px] px-[28px] ${
-                highlightedRow === index + 1 ? "bg-[#3e61ff]" : ""
-              }`}
-            >
-              <span className="w-[120px]">{row.time}</span>
-              <span className="w-[40px]">{row.vel}</span>
-              <span className="w-[40px]">{row.evt}</span>
-              <span className="w-[40px]">{row.det}</span>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-gray-400">Cargando...</span>
             </div>
-          ))}
+          ) : referenceRows.length > 0 ? (
+            referenceRows.map((row, index) => (
+              <div
+                key={index}
+                className={`flex gap-[30px] whitespace-nowrap py-[8px] -mx-[28px] px-[28px] ${
+                  highlightedRow === index + 1 ? "bg-[#3e61ff]" : ""
+                }`}
+              >
+                <span className="w-[120px]">{row.time}</span>
+                <span className="w-[40px]">{row.vel}</span>
+                <span className="w-[40px]">{row.evt}</span>
+                <span className="w-[40px]">{row.det}</span>
+              </div>
+            ))
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-gray-400">Sin referencias</span>
+            </div>
+          )}
         </div>
 
         {/* Right Table (MN:SG:CC, COEF, DIF CC, MTS) */}

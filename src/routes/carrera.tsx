@@ -1,10 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { RallyDashboard } from "../components/RallyDashboard";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/carrera")({
-  component: Carrera,
+  component: CarreraLayout,
 });
 
-function Carrera() {
-  return <RallyDashboard />;
+function CarreraLayout() {
+  return <Outlet />;
 }
