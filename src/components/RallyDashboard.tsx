@@ -21,6 +21,9 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const [odometerDistance, setOdometerDistance] = useState<OdometerDistance>("100m");
   const [showDistanceModal, setShowDistanceModal] = useState(false);
   const [odometerMeters, setOdometerMeters] = useState(0);
+  const [computadoraMeters, setComputadoraMeters] = useState(0);
+  const [isRaceRunning, setIsRaceRunning] = useState(false);
+  const [diffSnapshot, setDiffSnapshot] = useState(0);
 
   // Load data
   const { data: _race } = useRace(raceId);
@@ -65,9 +68,15 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
       } else if (e.key === "a" || e.key === "A") {
         const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
-        setOdometerMeters((prev) => prev + increment);
+        setOdometerMeters((prev) => {
+          const newValue = prev + increment;
+          setDiffSnapshot(newValue - computadoraMeters);
+          return newValue;
+        });
       } else if (e.key === "c" || e.key === "C") {
         setOdometerMeters(0);
+      } else if (e.key === "Enter") {
+        setIsRaceRunning((prev) => !prev);
       }
     };
 
@@ -78,7 +87,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance]);
+  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance, computadoraMeters]);
 
   // Helper to format time
   const formatTime = (ref: ReferenceEntry) => {
@@ -127,6 +136,26 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const speedAfter1 = getSpeedChangeAt(currentSpeedChangeIndex + 1);
   const speedAfter2 = getSpeedChangeAt(currentSpeedChangeIndex + 2);
 
+  // Get numeric current speed for calculations
+  const currentSpeedNum = currentSpeedChangeIndex >= 0 && currentSpeedChangeIndex < speedChanges.length
+    ? speedChanges[currentSpeedChangeIndex].speed
+    : 0;
+
+  // Race timer - increment COMPUTADORA odometer based on current speed
+  useEffect(() => {
+    if (!isRaceRunning || currentSpeedNum === 0) return;
+
+    // Speed is in km/h, convert to meters per 100ms
+    // km/h to m/s: speed / 3.6
+    // m/s to m/100ms: speed / 36
+    const metersPerInterval = currentSpeedNum / 36;
+
+    const interval = setInterval(() => {
+      setComputadoraMeters((prev) => prev + metersPerInterval);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isRaceRunning, currentSpeedNum]);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-[#ececec]">
@@ -140,25 +169,31 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
             COMPUTADORA
           </p>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
-            1
+            {Math.floor(computadoraMeters / 1000) % 10}
           </p>
           <p className="absolute left-[208.5px] -translate-x-1/2 top-[99px] text-[175px] font-bold text-[#3e61ff]">
-            5
+            {Math.floor(computadoraMeters / 100) % 10}
           </p>
           <p className="absolute left-[351.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-[#ef3c3c]">
-            3
+            {Math.floor(computadoraMeters / 10) % 10}
           </p>
         </div>
 
-        {/* Status Section - Top Center (Red) */}
-        <div className="absolute left-[436px] top-0 w-[568px] h-[344px] bg-[#ef3c3c] text-center text-white overflow-hidden">
-          <p className="absolute left-1/2 -translate-x-1/2 top-[32px] text-[48px] font-semibold">
-            ATRASADO
-          </p>
-          <p className="absolute left-1/2 -translate-x-1/2 top-[90px] text-[175px] font-extrabold">
-            10,1
-          </p>
-        </div>
+        {/* Status Section - Top Center */}
+        {(() => {
+          const status = diffSnapshot < -0.3 ? "ATRASADO" : diffSnapshot > 0.3 ? "ADELANTADO" : "PERFECTO";
+          const displayValue = Math.abs(diffSnapshot).toFixed(1).replace(".", ",");
+          return (
+            <div className="absolute left-[436px] top-0 w-[568px] h-[344px] bg-[#ef3c3c] text-center text-white overflow-hidden">
+              <p className="absolute left-1/2 -translate-x-1/2 top-[32px] text-[48px] font-semibold">
+                {status}
+              </p>
+              <p className="absolute left-1/2 -translate-x-1/2 top-[90px] text-[175px] font-extrabold">
+                {displayValue}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Auto Section - Top Right */}
         <div className="absolute left-[1004px] top-0 w-[436px] h-[344px] text-center">
