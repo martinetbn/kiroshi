@@ -522,10 +522,10 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
           <div className="bg-black h-[874px] text-white text-[28px] font-medium p-[30px] overflow-y-auto leading-relaxed flex flex-col">
             {/* Header row */}
             <div className="flex gap-[30px] whitespace-nowrap py-[8px]">
-              <span className="w-[200px]">hs:mn:sg:cc</span>
-              <span className="w-[90px]">km/h</span>
-              <span className="w-[100px]">Evento</span>
-              <span className="w-[120px]">Info</span>
+              <span className="w-[200px]">HH:MM:SS:CC</span>
+              <span className="w-[90px]">KM/H</span>
+              <span className="w-[100px]">EVENTO</span>
+              <span className="w-[120px]">INFO</span>
             </div>
 
             {/* Data rows */}
