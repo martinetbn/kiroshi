@@ -3,16 +3,24 @@ import { useNavigate } from "@tanstack/react-router";
 import { usePC } from "../hooks/usePCs";
 import { useReferencesByPC } from "../hooks/useReferences";
 import { useRace } from "../hooks/useRaces";
+import { getPreference, setPreference } from "../api/tauri";
 import type { ReferenceEntry } from "../types";
+
+const ODOMETER_DISTANCE_KEY = "odometer_distance";
 
 interface RallyDashboardProps {
   raceId: number;
   pcId: number;
 }
 
+type OdometerDistance = "100m" | "50m" | "25m";
+
 export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   const [scale, setScale] = useState(1);
   const navigate = useNavigate();
+  const [odometerDistance, setOdometerDistance] = useState<OdometerDistance>("100m");
+  const [showDistanceModal, setShowDistanceModal] = useState(false);
+  const [odometerMeters, setOdometerMeters] = useState(0);
 
   // Load data
   const { data: _race } = useRace(raceId);
@@ -25,6 +33,15 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
+  // Load odometer distance preference on mount
+  useEffect(() => {
+    getPreference(ODOMETER_DISTANCE_KEY).then((value) => {
+      if (value === "100m" || value === "50m" || value === "25m") {
+        setOdometerDistance(value);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const updateScale = () => {
       const scaleX = window.innerWidth / 1440;
@@ -34,7 +51,11 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        navigate({ to: "/carrera/$raceId", params: { raceId: String(raceId) } });
+        if (showDistanceModal) {
+          setShowDistanceModal(false);
+        } else {
+          navigate({ to: "/carrera/$raceId", params: { raceId: String(raceId) } });
+        }
       } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         setCurrentIndex((prev) => {
           const maxIndex = (references?.length ?? 1) - 1;
@@ -42,6 +63,11 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         });
       } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      } else if (e.key === "a" || e.key === "A") {
+        const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
+        setOdometerMeters((prev) => prev + increment);
+      } else if (e.key === "c" || e.key === "C") {
+        setOdometerMeters(0);
       }
     };
 
@@ -52,7 +78,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate, raceId, references?.length]);
+  }, [navigate, raceId, references?.length, showDistanceModal, odometerDistance]);
 
   // Helper to format time
   const formatTime = (ref: ReferenceEntry) => {
@@ -111,7 +137,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* Computadora Section - Top Left */}
         <div className="absolute left-0 top-0 w-[436px] h-[344px] text-center">
           <p className="absolute left-1/2 -translate-x-1/2 top-[34px] text-[36px] font-medium text-black">
-            Computadora
+            COMPUTADORA
           </p>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
             1
@@ -137,16 +163,22 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* Auto Section - Top Right */}
         <div className="absolute left-[1004px] top-0 w-[436px] h-[344px] text-center">
           <p className="absolute left-1/2 -translate-x-1/2 top-[34px] text-[36px] font-medium text-black">
-            Auto
+            AUTO
           </p>
+          <button
+            onClick={() => setShowDistanceModal(true)}
+            className="absolute left-[calc(50%+58px)] top-[44px] text-[20px] font-medium text-[#3e61ff] hover:text-[#2d4ecc] cursor-pointer bg-transparent border-none underline"
+          >
+            {odometerDistance}
+          </button>
           <p className="absolute left-[74.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-black">
-            1
+            {Math.floor(odometerMeters / 1000) % 10}
           </p>
           <p className="absolute left-[208.5px] -translate-x-1/2 top-[99px] text-[175px] font-bold text-[#3e61ff]">
-            5
+            {Math.floor(odometerMeters / 100) % 10}
           </p>
           <p className="absolute left-[353.5px] -translate-x-1/2 top-[127px] text-[128px] font-bold text-[#ef3c3c]">
-            2
+            {Math.floor(odometerMeters / 10) % 10}
           </p>
         </div>
 
@@ -278,6 +310,44 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
           ))}
         </div>
       </div>
+
+      {/* Distance Selection Modal */}
+      {showDistanceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[300px] overflow-hidden">
+            <div className="bg-[#3e61ff] px-6 py-4">
+              <h2 className="text-white text-[24px] font-semibold">Distancia</h2>
+            </div>
+            <div className="p-4 flex flex-col gap-2">
+              {(["100m", "50m", "25m"] as OdometerDistance[]).map((distance) => (
+                <button
+                  key={distance}
+                  onClick={() => {
+                    setOdometerDistance(distance);
+                    setPreference(ODOMETER_DISTANCE_KEY, distance);
+                    setShowDistanceModal(false);
+                  }}
+                  className={`w-full px-4 py-3 text-[18px] font-medium rounded transition-colors ${
+                    odometerDistance === distance
+                      ? "bg-[#3e61ff] text-white"
+                      : "bg-[#e0e0e0] hover:bg-[#d0d0d0] text-black"
+                  }`}
+                >
+                  {distance}
+                </button>
+              ))}
+            </div>
+            <div className="px-4 pb-4">
+              <button
+                onClick={() => setShowDistanceModal(false)}
+                className="w-full px-4 py-3 bg-[#d9d9d9] hover:bg-[#c0c0c0] text-black text-[18px] font-medium rounded transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -55,3 +55,11 @@ export const deleteReference = (id: number) =>
 
 export const toggleControlZone = (id: number) =>
   invoke<ReferenceEntry>("toggle_control_zone", { id });
+
+// ==================== PREFERENCE API ====================
+
+export const getPreference = (key: string) =>
+  invoke<string | null>("get_preference", { key });
+
+export const setPreference = (key: string, value: string) =>
+  invoke<void>("set_preference", { key, value });

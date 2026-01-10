@@ -59,6 +59,12 @@ pub fn initialize(app: &AppHandle) -> Result<()> {
             FOREIGN KEY (pc_id) REFERENCES pcs(id) ON DELETE CASCADE
         );
 
+        -- User preferences table (key-value store)
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
         -- Enable foreign key support
         PRAGMA foreign_keys = ON;
 

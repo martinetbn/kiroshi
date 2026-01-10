@@ -452,3 +452,33 @@ pub fn toggle_control_zone(db: State<Database>, id: i64) -> Result<ReferenceEntr
     })
     .map_err(|e| e.to_string())
 }
+
+// ==================== PREFERENCE COMMANDS ====================
+
+#[tauri::command]
+pub fn get_preference(db: State<Database>, key: String) -> Result<Option<String>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM user_preferences WHERE key = ?1")
+        .map_err(|e| e.to_string())?;
+
+    let result = stmt.query_row([&key], |row| row.get::<_, String>(0));
+
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn set_preference(db: State<Database>, key: String, value: String) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO user_preferences (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [&key, &value],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}

@@ -32,6 +32,9 @@ pub fn run() {
             update_reference,
             delete_reference,
             toggle_control_zone,
+            // Preference commands
+            get_preference,
+            set_preference,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
