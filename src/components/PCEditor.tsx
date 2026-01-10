@@ -519,7 +519,7 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
           </div>
 
           {/* Table */}
-          <div className="bg-black h-[874px] text-white text-[28px] font-medium p-[30px] overflow-y-auto leading-relaxed flex flex-col">
+          <div className="bg-black h-[874px] text-white text-[28px] font-medium p-[30px] overflow-y-auto overflow-x-hidden leading-relaxed flex flex-col">
             {/* Header row */}
             <div className="flex gap-[30px] whitespace-nowrap py-[8px]">
               <span className="w-[200px]">HH:MM:SS:CC</span>
@@ -563,6 +563,12 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
             scale={scale}
             items={[
               {
+                label: contextMenu.ref.is_control_zone
+                  ? "Quitar Zona de Control"
+                  : "Marcar como Zona de Control",
+                onClick: () => handleToggleControlZone(contextMenu.ref),
+              },
+              {
                 label: "Editar",
                 onClick: () => setEditingRef(contextMenu.ref),
               },
@@ -570,12 +576,6 @@ export function PCEditor({ raceId, pcId }: PCEditorProps) {
                 label: "Eliminar",
                 onClick: () => setDeletingRef(contextMenu.ref),
                 danger: true,
-              },
-              {
-                label: contextMenu.ref.is_control_zone
-                  ? "Quitar Zona de Control"
-                  : "Marcar como Zona de Control",
-                onClick: () => handleToggleControlZone(contextMenu.ref),
               },
             ]}
             onClose={() => setContextMenu(null)}
