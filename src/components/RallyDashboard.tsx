@@ -23,7 +23,7 @@ interface RecordedSnapshot {
   referenceIndex: number;
   recordedCentiseconds: number; // Corrected race clock when recorded
   expectedCentiseconds: number; // Expected time from reference
-  diffCentiseconds: number; // Difference (positive = late, negative = early)
+  diffCentiseconds: number; // Difference (positive = early/ahead, negative = late/behind)
   diffMeters: number; // Difference in meters based on speed
   recommendedFactor: number | null; // Calculated factor if odometer available
   rawMeters: number; // Raw meters at recording time
@@ -213,6 +213,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         resetOdometer();
       } else if (e.key === "Enter") {
         // When starting the race, set the race clock to start from LAR time
+        // Enter only works once to start the race, not to pause it
         if (!timerState.is_running) {
           // Find the LAR reference (race start)
           const larRef = references?.find((ref) => ref.event_type === "LAR");
@@ -243,9 +244,11 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
               const maxIndex = (references?.length ?? 1) - 1;
               return prev < maxIndex ? prev + 1 : prev;
             });
+
+            // Start the race timer
+            toggleRaceTimer();
           }
         }
-        toggleRaceTimer();
       } else if (e.key === "1") {
         adjustCorrectionFactor(-0.01);
       } else if (e.key === "2") {
@@ -313,7 +316,8 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     const currentTimer = timerStateRef.current;
     const currentCorrection = clockCorrectionCsRef.current;
     const recordedCs = currentTimer.race_clock_centiseconds + currentCorrection;
-    const diffCs = recordedCs - expectedCs;
+    // Difference: positive = early (arrived before expected), negative = late
+    const diffCs = expectedCs - recordedCs;
 
     // Calculate difference in meters based on current speed
     // speed is in km/h, convert to m/cs: (speed / 3.6) / 100 = speed / 360
@@ -464,7 +468,15 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
           {correction_factor.toFixed(2)}
         </p>
         <p className="absolute left-[860px] -translate-x-1/2 top-[457px] text-[36px] font-semibold text-white text-center">
-          1051.75
+          {(() => {
+            // Find the latest snapshot with a recommended factor
+            for (let i = recordedSnapshots.length - 1; i >= 0; i--) {
+              if (recordedSnapshots[i].recommendedFactor !== null) {
+                return recordedSnapshots[i].recommendedFactor!.toFixed(2);
+              }
+            }
+            return "--";
+          })()}
         </p>
 
         {/* Distance Display */}
