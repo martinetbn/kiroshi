@@ -57,6 +57,9 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // Next PC LAR time in centiseconds (null if no next PC)
   const [nextPcLarCentiseconds, setNextPcLarCentiseconds] = useState<number | null>(null);
 
+  // Clock correction in centiseconds (positive = ahead, negative = behind)
+  const [clockCorrectionCs, setClockCorrectionCs] = useState(0);
+
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
 
@@ -208,6 +211,10 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         adjustCorrectionFactor(-100);
       } else if (e.key === "r" || e.key === "R") {
         adjustCorrectionFactor(100);
+      } else if (e.key === "j" || e.key === "J") {
+        setClockCorrectionCs((prev) => prev - 1);
+      } else if (e.key === "k" || e.key === "K") {
+        setClockCorrectionCs((prev) => prev + 1);
       }
     };
 
@@ -252,7 +259,8 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // Format countdown to next PC (centiseconds to MM:SS)
   const formatCountdown = (): string => {
     if (nextPcLarCentiseconds === null) return "--:--";
-    const remainingCentiseconds = nextPcLarCentiseconds - race_clock_centiseconds;
+    const correctedClock = race_clock_centiseconds + clockCorrectionCs;
+    const remainingCentiseconds = nextPcLarCentiseconds - correctedClock;
     if (remainingCentiseconds <= 0) return "00:00";
     const totalSeconds = Math.floor(remainingCentiseconds / 100);
     const minutes = Math.floor(totalSeconds / 60);
@@ -368,7 +376,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* Hora de carrera */}
         <div className="absolute left-[436px] top-[847px] w-[284px] h-[109px] flex flex-col gap-1 items-center justify-center text-black text-center overflow-hidden">
           <p className="text-[24px] font-medium">Hora de carrera</p>
-          <p className="text-[36px] font-semibold">{formatRaceClock(race_clock_centiseconds)}</p>
+          <p className="text-[36px] font-semibold">{formatRaceClock(race_clock_centiseconds + clockCorrectionCs)}</p>
         </div>
 
         {/* Proxima PC */}
@@ -380,7 +388,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         {/* CC Correction */}
         <div className="absolute left-[436px] top-[956px] w-[568px] h-[68px] bg-black overflow-hidden">
           <p className="absolute left-1/2 -translate-x-1/2 top-[15px] text-[32px] font-bold text-white text-center">
-            -4 CC corrección
+            {clockCorrectionCs >= 0 ? "+" : ""}{clockCorrectionCs} CC corrección
           </p>
         </div>
 
