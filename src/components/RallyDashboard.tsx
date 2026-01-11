@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { listen } from "@tauri-apps/api/event";
 import { usePC } from "../hooks/usePCs";
@@ -18,6 +18,17 @@ import {
   getReferencesByPc,
 } from "../api/tauri";
 import type { ReferenceEntry, RaceTimerState } from "../types";
+
+interface RecordedSnapshot {
+  referenceIndex: number;
+  recordedCentiseconds: number; // Corrected race clock when recorded
+  expectedCentiseconds: number; // Expected time from reference
+  diffCentiseconds: number; // Difference (positive = late, negative = early)
+  diffMeters: number; // Difference in meters based on speed
+  recommendedFactor: number | null; // Calculated factor if odometer available
+  rawMeters: number; // Raw meters at recording time
+  odometerMeters: number; // Odometer reading at recording time
+}
 
 const ODOMETER_DISTANCE_KEY = "odometer_distance";
 
@@ -59,6 +70,27 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
 
   // Clock correction in centiseconds (positive = ahead, negative = behind)
   const [clockCorrectionCs, setClockCorrectionCs] = useState(0);
+
+  // Recorded reference snapshots
+  const [recordedSnapshots, setRecordedSnapshots] = useState<RecordedSnapshot[]>([]);
+
+  // Refs to access current values in event handlers (avoid stale closures)
+  const timerStateRef = useRef(timerState);
+  const clockCorrectionCsRef = useRef(clockCorrectionCs);
+  const currentIndexRef = useRef(currentIndex);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    timerStateRef.current = timerState;
+  }, [timerState]);
+
+  useEffect(() => {
+    clockCorrectionCsRef.current = clockCorrectionCs;
+  }, [clockCorrectionCs]);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
@@ -192,6 +224,25 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
               larRef.seconds * 100 +
               larRef.centiseconds;
             setRaceClockStart(centiseconds);
+
+            // Record the LAR as the first reference (no comparison data)
+            const snapshot: RecordedSnapshot = {
+              referenceIndex: currentIndex,
+              recordedCentiseconds: centiseconds,
+              expectedCentiseconds: centiseconds,
+              diffCentiseconds: 0,
+              diffMeters: 0,
+              recommendedFactor: null, // No comparison for first reference
+              rawMeters: 0,
+              odometerMeters: 0,
+            };
+            setRecordedSnapshots([snapshot]);
+
+            // Advance to the next reference
+            setCurrentIndex((prev) => {
+              const maxIndex = (references?.length ?? 1) - 1;
+              return prev < maxIndex ? prev + 1 : prev;
+            });
           }
         }
         toggleRaceTimer();
@@ -215,6 +266,17 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
         setClockCorrectionCs((prev) => prev - 1);
       } else if (e.key === "k" || e.key === "K") {
         setClockCorrectionCs((prev) => prev + 1);
+      } else if (e.key === " ") {
+        e.preventDefault(); // Prevent page scroll
+        recordReference();
+      } else if (e.key === "b" || e.key === "B") {
+        // Delete last taken reference (but not the LAR)
+        if (recordedSnapshots.length > 1) {
+          const lastSnapshot = recordedSnapshots[recordedSnapshots.length - 1];
+          setRecordedSnapshots((prev) => prev.slice(0, -1));
+          // Move back to the deleted reference's index
+          setCurrentIndex(lastSnapshot.referenceIndex);
+        }
       }
     };
 
@@ -225,7 +287,7 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       window.removeEventListener("resize", updateScale);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [navigate, raceId, references, showDistanceModal, odometerDistance, timerState.is_running]);
+  }, [navigate, raceId, references, showDistanceModal, odometerDistance, timerState.is_running, recordedSnapshots]);
 
   // Helper to format time
   const formatTime = (ref: ReferenceEntry) => {
@@ -234,6 +296,53 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     const s = String(ref.seconds).padStart(2, "0");
     const c = String(ref.centiseconds).padStart(2, "0");
     return `${h}:${m}:${s}:${c}`;
+  };
+
+  // Helper to convert reference time to centiseconds
+  const refToCentiseconds = (ref: ReferenceEntry): number => {
+    return ref.hours * 360000 + ref.minutes * 6000 + ref.seconds * 100 + ref.centiseconds;
+  };
+
+  // Record a reference snapshot (uses refs for current values)
+  const recordReference = () => {
+    const idx = currentIndexRef.current;
+    if (!references || idx >= references.length) return;
+
+    const currentRef = references[idx];
+    const expectedCs = refToCentiseconds(currentRef);
+    const currentTimer = timerStateRef.current;
+    const currentCorrection = clockCorrectionCsRef.current;
+    const recordedCs = currentTimer.race_clock_centiseconds + currentCorrection;
+    const diffCs = recordedCs - expectedCs;
+
+    // Calculate difference in meters based on current speed
+    // speed is in km/h, convert to m/cs: (speed / 3.6) / 100 = speed / 360
+    const diffMts = (currentRef.speed / 360) * diffCs;
+
+    // Calculate recommended factor: (COMPUTADORA raw / AUTO odometer) * 1000
+    let recommendedFactor: number | null = null;
+    if (currentTimer.odometer_meters > 0 && currentTimer.raw_meters > 0) {
+      recommendedFactor = (currentTimer.raw_meters / currentTimer.odometer_meters) * 1000;
+    }
+
+    const snapshot: RecordedSnapshot = {
+      referenceIndex: idx,
+      recordedCentiseconds: recordedCs,
+      expectedCentiseconds: expectedCs,
+      diffCentiseconds: diffCs,
+      diffMeters: diffMts,
+      recommendedFactor,
+      rawMeters: currentTimer.raw_meters,
+      odometerMeters: currentTimer.odometer_meters,
+    };
+
+    setRecordedSnapshots((prev) => [...prev, snapshot]);
+
+    // Auto-advance to next reference
+    setCurrentIndex((prev) => {
+      const maxIndex = (references?.length ?? 1) - 1;
+      return prev < maxIndex ? prev + 1 : prev;
+    });
   };
 
   // Get the reference data for display
@@ -392,11 +501,11 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
           </p>
         </div>
 
-        {/* Left Table (HS:MN:SG:CC, VEL, EVT, DET) */}
+        {/* Left Table (HH:MM:SS:CC, VEL, EVT, DET) */}
         <div className="absolute left-0 top-[344px] w-[436px] h-[680px] bg-black text-white text-[20px] font-medium overflow-hidden flex flex-col pt-[22px] pb-[28px] px-[28px]">
           {/* Header row */}
           <div className="flex gap-[30px] whitespace-nowrap py-[8px]">
-            <span className="w-[120px]">HS:MN:SG:CC</span>
+            <span className="w-[120px]">HH:MM:SS:CC</span>
             <span className="w-[40px]">VEL</span>
             <span className="w-[40px]">EVT</span>
             <span className="w-[40px]">DET</span>
@@ -428,32 +537,67 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
           )}
         </div>
 
-        {/* Right Table (MN:SG:CC, COEF, DIF CC, MTS) */}
+        {/* Right Table (MM:SS:CC, COEF, DIF, MTS) */}
         <div className="absolute left-[1004px] top-[344px] w-[436px] h-[680px] bg-black text-white text-[20px] font-medium overflow-hidden flex flex-col pt-[22px] pb-[28px] px-[28px]">
           {/* Header row */}
           <div className="flex gap-[18px] whitespace-nowrap py-[8px]">
-            <span className="w-[90px]">MN:SG:CC</span>
+            <span className="w-[90px]">MM:SS:CC</span>
             <span className="w-[70px]">COEF</span>
-            <span className="w-[60px]">DIF CC</span>
+            <span className="w-[60px]">CC</span>
             <span className="w-[50px]">MTS</span>
           </div>
 
           {/* Data rows */}
-          {[
-            { time: "30:00:00", coef: "-", dif: "-", mts: "-" },
-            { time: "31:46:56", coef: "1051.56", dif: "-6.2", mts: "-1.2" },
-            { time: "33:52:29", coef: "1051.75", dif: "-10.3", mts: "-3.6" },
-          ].map((row, index) => (
-            <div
-              key={index}
-              className="flex gap-[18px] whitespace-nowrap py-[8px]"
-            >
-              <span className="w-[90px]">{row.time}</span>
-              <span className="w-[70px]">{row.coef}</span>
-              <span className="w-[60px]">{row.dif}</span>
-              <span className="w-[50px]">{row.mts}</span>
+          {recordedSnapshots.length > 0 ? (
+            recordedSnapshots.map((snapshot, index) => {
+              // Format recorded time as MM:SS:CC
+              const totalSeconds = Math.floor(snapshot.recordedCentiseconds / 100);
+              const minutes = Math.floor(totalSeconds / 60);
+              const seconds = totalSeconds % 60;
+              const centis = snapshot.recordedCentiseconds % 100;
+              const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}:${String(centis).padStart(2, "0")}`;
+
+              // First reference (LAR) shows dashes for comparison columns
+              const isFirstReference = index === 0;
+
+              // Format factor
+              const coefStr = isFirstReference
+                ? "-"
+                : snapshot.recommendedFactor !== null
+                  ? snapshot.recommendedFactor.toFixed(2)
+                  : "-";
+
+              // Format diff centiseconds (with sign)
+              const diffCsStr = isFirstReference
+                ? "-"
+                : snapshot.diffCentiseconds >= 0
+                  ? `+${snapshot.diffCentiseconds.toFixed(0)}`
+                  : snapshot.diffCentiseconds.toFixed(0);
+
+              // Format diff meters (with sign, 1 decimal)
+              const diffMtsStr = isFirstReference
+                ? "-"
+                : snapshot.diffMeters >= 0
+                  ? `+${snapshot.diffMeters.toFixed(1)}`
+                  : snapshot.diffMeters.toFixed(1);
+
+              return (
+                <div
+                  key={index}
+                  className="flex gap-[18px] whitespace-nowrap py-[8px]"
+                >
+                  <span className="w-[90px]">{timeStr}</span>
+                  <span className="w-[70px]">{coefStr}</span>
+                  <span className="w-[60px]">{diffCsStr}</span>
+                  <span className="w-[50px]">{diffMtsStr}</span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-gray-400">Presiona Space para registrar</span>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
