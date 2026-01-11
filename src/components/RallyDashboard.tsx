@@ -74,10 +74,14 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   // Recorded reference snapshots
   const [recordedSnapshots, setRecordedSnapshots] = useState<RecordedSnapshot[]>([]);
 
+  // Raw meters captured at the moment of last odometer tick (for accurate factor calculation)
+  const [rawMetersAtOdometerTick, setRawMetersAtOdometerTick] = useState<number>(0);
+
   // Refs to access current values in event handlers (avoid stale closures)
   const timerStateRef = useRef(timerState);
   const clockCorrectionCsRef = useRef(clockCorrectionCs);
   const currentIndexRef = useRef(currentIndex);
+  const rawMetersAtOdometerTickRef = useRef(rawMetersAtOdometerTick);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -91,6 +95,10 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
+
+  useEffect(() => {
+    rawMetersAtOdometerTickRef.current = rawMetersAtOdometerTick;
+  }, [rawMetersAtOdometerTick]);
 
   // For highlighting rows (1-based)
   const highlightedRow = currentIndex + 1;
@@ -209,6 +217,8 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       } else if (e.key === "a" || e.key === "A") {
         const increment = odometerDistance === "100m" ? 100 : odometerDistance === "50m" ? 50 : 25;
         adjustOdometer(increment);
+        // Capture raw_meters at the moment of odometer tick for accurate factor calculation
+        setRawMetersAtOdometerTick(timerStateRef.current.raw_meters);
       } else if (e.key === "c" || e.key === "C") {
         resetOdometer();
       } else if (e.key === "Enter") {
@@ -323,10 +333,16 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
     // speed is in km/h, convert to m/cs: (speed / 3.6) / 100 = speed / 360
     const diffMts = (currentRef.speed / 360) * diffCs;
 
-    // Calculate recommended factor: (COMPUTADORA raw / AUTO odometer) * 1000
+    // Calculate recommended factor using raw_meters captured at the moment of odometer tick
+    // Compensate for pilot timing error:
+    // - If pilot is late (diffMts negative), they've traveled extra distance due to extra time
+    // - Subtract this extra distance to get the "on-time" raw_meters
+    // Formula: factor = (odometer / raw_adjusted) * 1000
+    const rawMetersAtTick = rawMetersAtOdometerTickRef.current;
+    const rawMetersAdjusted = rawMetersAtTick + diffMts; // diffMts is negative when late
     let recommendedFactor: number | null = null;
-    if (currentTimer.odometer_meters > 0 && currentTimer.raw_meters > 0) {
-      recommendedFactor = (currentTimer.raw_meters / currentTimer.odometer_meters) * 1000;
+    if (currentTimer.odometer_meters > 0 && rawMetersAdjusted > 0) {
+      recommendedFactor = (currentTimer.odometer_meters / rawMetersAdjusted) * 1000;
     }
 
     const snapshot: RecordedSnapshot = {
@@ -339,6 +355,21 @@ export function RallyDashboard({ raceId, pcId }: RallyDashboardProps) {
       rawMeters: currentTimer.raw_meters,
       odometerMeters: currentTimer.odometer_meters,
     };
+
+    // Debug log for validating calculations
+    console.log("=== DEBUG ===", {
+      referencia: idx,
+      velocidad_kmh: currentRef.speed,
+      tiempo_esperado_cs: expectedCs,
+      tiempo_registrado_cs: recordedCs,
+      diff_cs: diffCs,
+      diff_metros: diffMts,
+      raw_meters_at_odometer_tick: rawMetersAtTick,
+      raw_meters_adjusted: rawMetersAdjusted,
+      odometer_meters: currentTimer.odometer_meters,
+      factor_actual: currentTimer.correction_factor,
+      factor_recomendado: recommendedFactor,
+    });
 
     setRecordedSnapshots((prev) => [...prev, snapshot]);
 
